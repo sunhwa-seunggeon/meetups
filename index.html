@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>청첩장 모임 캘린더</title>
+<meta name="robots" content="noindex" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+/* 청첩장과 같은 숲색 톤. 위: D-day·진행률 / 가운데: 월 달력 / 아래: 상태별 목록 */
+:root{
+  --bg:#f6f4ef; --card:#fcfbfa; --ink:#12291d; --body:#2a4a36; --muted:#6b7f70;
+  --line:#dcd9cf; --forest:#2b4632; --rose:#b5546a; --soft:#e9efe8;
+  --done:#7c8b80; --plan:#2b4632; --wait:#b07a1f; --none:#a3a39a;
+  --serif:"Noto Serif KR",serif; --sans:"Noto Sans KR",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1a13; --card:#16241b; --ink:#e8eee9; --body:#c6d2c8; --muted:#8fa294;
+  --line:#2a3b2f; --forest:#8fc19c; --rose:#e48aa0; --soft:#1e3125;
+  --done:#7d8f82; --plan:#8fc19c; --wait:#e0b25a; --none:#6f7a71; color-scheme:dark;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 var(--sans);
+  padding:24px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left))}
+main{max-width:860px;margin:0 auto;display:grid;gap:20px}
+h1,h2{font-family:var(--serif);color:var(--ink);font-weight:600;margin:0;text-wrap:balance}
+h1{font-size:1.6rem} h2{font-size:1.1rem}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px}
+.dday{font-family:var(--serif);color:var(--rose);font-size:1.05rem}
+.sub{color:var(--muted);font-size:.9rem}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--forest)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;font-variant-numeric:tabular-nums}
+.cal .dow{text-align:center;font-size:.75rem;color:var(--muted);padding:4px 0}
+.cal .d{min-height:72px;border-radius:6px;padding:4px;background:var(--bg);min-width:0}
+.cal .d.out{opacity:.35}
+.cal .d.today{outline:2px solid var(--forest)}
+.cal .d.wed{background:var(--rose);color:#fff}
+.cal .n{font-size:.75rem}
+.chip{display:block;font-size:.7rem;line-height:1.3;margin-top:2px;padding:1px 4px;border-radius:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--soft);color:var(--ink)}
+.chip.done{color:var(--done);text-decoration:line-through}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);
+  border-radius:6px;padding:4px 10px;cursor:pointer}
+button.primary{background:var(--forest);color:var(--card);border-color:var(--forest)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--rose);outline-offset:1px}
+.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px}
+.group h2{font-family:var(--sans);font-size:.8rem;letter-spacing:.05em;display:flex;gap:6px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.group ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
+.group li{display:flex;justify-content:space-between;gap:8px;font-size:.9rem}
+.group li span:last-child{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse}
+td{padding:3px 2px}
+td input,td select{width:100%;font:inherit;font-size:.85rem;padding:4px;border:1px solid var(--line);
+  border-radius:4px;background:var(--bg);color:var(--ink);min-width:0}
+.edit-wrap{overflow-x:auto}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#msg{font-size:.85rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1>청첩장 모임</h1>
+      <div class="dday" id="dday"></div>
+    </div>
+    <div class="row">
+      <span class="sub" id="progress"></span>
+      <button id="editBtn" type="button">편집</button>
+    </div>
+  </header>
+  <div class="bar"><i id="barFill"></i></div>
+
+  <section class="card">
+    <div class="cal-head">
+      <button type="button" id="prev" aria-label="이전 달">‹</button>
+      <h2 id="monthTitle"></h2>
+      <button type="button" id="next" aria-label="다음 달">›</button>
+    </div>
+    <div class="cal" id="cal"></div>
+  </section>
+
+  <section class="groups" id="groups"></section>
+
+  <section class="card" id="editor" hidden>
+    <div class="row" id="tokenRow">
+      <label for="token" class="sub">GitHub 토큰 (이 브라우저에만 저장)</label>
+      <input id="token" type="password" autocomplete="off" style="flex:1;min-width:0" />
+    </div>
+    <div class="edit-wrap"><table><tbody id="rows"></tbody></table></div>
+    <div class="row" style="margin-top:10px">
+      <button type="button" id="addBtn">+ 추가</button>
+      <button type="button" class="primary" id="saveBtn">저장</button>
+      <span id="msg"></span>
+    </div>
+  </section>
+</main>
+
+<script>
+const REPO = "sunhwa-seunggeon/meetups", PATH = "schedule.json";
+const API = `https://api.github.com/repos/${REPO}/contents/${PATH}`;
+const WEDDING = "2026-12-27";
+const STATES = {done:["완료","--done"], plan:["예정","--plan"], wait:["조율중","--wait"], none:["미정","--none"]};
+
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2,"0");
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today = ymd(new Date());
+const md = s => s ? `${+s.slice(5,7)}/${+s.slice(8)}` : "";
+
+let list = [], sha = null, view = new Date(), editing = false;
+view.setDate(1);
+
+const status = m => m.date ? (m.date < today ? "done" : "plan") : (m.state === "조율중" ? "wait" : "none");
+const label = m => m.name + (m.slot ? ` · ${m.slot}` : "");
+
+function store(k, v){ try{ v === undefined ? v = localStorage.getItem(k) : localStorage.setItem(k, v); }catch(e){} return v; }
+const utf8decode = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g,"")), c => c.charCodeAt(0)));
+const utf8encode = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+const headers = () => { const t = store("gh_token"); return t ? {Authorization:`Bearer ${t}`} : {}; };
+
+async function load(){
+  try{
+    // API 는 커밋 즉시 최신값을 줌 (Pages 재배포 1분 안 기다림). 비로그인 시간당 60회 제한 → 넘으면 정적 파일로.
+    const r = await fetch(API + "?ref=main", {headers: headers(), cache: "no-store"});
+    if(!r.ok) throw r.status;
+    const j = await r.json(); sha = j.sha; list = JSON.parse(utf8decode(j.content));
+  }catch(e){
+    list = await (await fetch("schedule.json", {cache:"no-store"})).json();
+  }
+  render();
+}
+
+function render(){
+  const days = Math.round((new Date(WEDDING) - new Date(today)) / 864e5);
+  $("dday").textContent = days > 0 ? `12월 27일(일) 결혼식 · D-${days}` : days === 0 ? "오늘 결혼식!" : "결혼 축하해요";
+  const done = list.filter(m => status(m) === "done").length;
+  $("progress").textContent = `${done} / ${list.length} 완료`;
+  $("barFill").style.width = list.length ? `${done / list.length * 100}%` : "0";
+  renderCal(); renderGroups();
+  if(editing) renderEditor();
+}
+
+function renderCal(){
+  const y = view.getFullYear(), mo = view.getMonth();
+  $("monthTitle").textContent = `${y}년 ${mo+1}월`;
+  const start = new Date(y, mo, 1 - new Date(y, mo, 1).getDay());
+  const cal = $("cal"); cal.textContent = "";
+  "일월화수목금토".split("").forEach(d => cal.append(Object.assign(document.createElement("div"), {className:"dow", textContent:d})));
+  for(let i = 0; i < 42; i++){
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    if(i === 35 && d.getMonth() !== mo) break;
+    const key = ymd(d), cell = document.createElement("div");
+    cell.className = "d" + (d.getMonth() !== mo ? " out" : "") + (key === today ? " today" : "") + (key === WEDDING ? " wed" : "");
+    cell.append(Object.assign(document.createElement("div"), {className:"n", textContent: d.getDate() + (key === WEDDING ? " 💍" : "")}));
+    list.filter(m => m.date === key).forEach(m => {
+      cell.append(Object.assign(document.createElement("span"), {className:"chip" + (status(m) === "done" ? " done" : ""), textContent: label(m), title: label(m)}));
+    });
+    cal.append(cell);
+  }
+}
+
+function renderGroups(){
+  const g = $("groups"); g.textContent = "";
+  for(const [k, [name, color]] of Object.entries(STATES)){
+    const items = list.filter(m => status(m) === k).sort((a,b) => (a.date||"").localeCompare(b.date||""));
+    const box = document.createElement("div"); box.className = "card group";
+    box.innerHTML = `<h2><i class="dot" style="background:var(${color})"></i><span></span></h2><ul></ul>`;
+    box.querySelector("h2 span").textContent = `${name} ${items.length}`;
+    for(const m of items){
+      const li = document.createElement("li");
+      li.append(Object.assign(document.createElement("span"), {textContent: m.name}),
+                Object.assign(document.createElement("span"), {textContent: [md(m.date), m.slot].filter(Boolean).join(" ")}));
+      box.querySelector("ul").append(li);
+    }
+    g.append(box);
+  }
+}
+
+function renderEditor(){
+  const tb = $("rows"); tb.textContent = "";
+  list.forEach((m, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><input data-k="name" aria-label="이름"></td><td><input data-k="date" type="date" aria-label="날짜"></td>
+      <td><input data-k="slot" placeholder="점심/저녁" aria-label="시간대"></td>
+      <td><select data-k="state" aria-label="상태"><option value="">-</option><option>조율중</option></select></td>
+      <td><button type="button" aria-label="삭제">✕</button></td>`;
+    tr.querySelectorAll("[data-k]").forEach(el => {
+      el.value = m[el.dataset.k] || "";
+      el.onchange = () => { m[el.dataset.k] = el.value; renderCal(); renderGroups(); };
+    });
+    tr.querySelector("button").onclick = () => { list.splice(i, 1); render(); };
+    tb.append(tr);
+  });
+}
+
+async function save(){
+  const t = $("token").value.trim();
+  if(!t){ $("msg").textContent = "토큰을 넣어 주세요."; return; }
+  store("gh_token", t);
+  $("msg").textContent = "저장 중…";
+  try{
+    // 다른 기기에서 먼저 저장했을 수 있으니 최신 sha 로 덮어씀 (마지막 저장이 이김)
+    const cur = await fetch(API + "?ref=main", {headers: headers(), cache: "no-store"});
+    if(cur.ok) sha = (await cur.json()).sha;
+    const clean = list.filter(m => m.name.trim());
+    const r = await fetch(API, {method:"PUT", headers:{...headers(), "Content-Type":"application/json"},
+      body: JSON.stringify({message:"청첩장 모임 일정 수정", content: utf8encode(JSON.stringify(clean, null, 2) + "\n"), sha, branch:"main"})});
+    if(!r.ok) throw new Error(r.status === 401 ? "토큰이 맞지 않아요." : r.status === 403 || r.status === 404 ? "토큰에 이 저장소 쓰기 권한이 없어요." : `실패 (${r.status})`);
+    sha = (await r.json()).content.sha; list = clean;
+    $("msg").textContent = "저장했어요. 다른 사람은 새로고침하면 보여요.";
+    render();
+  }catch(e){ $("msg").textContent = e.message || "저장하지 못했어요. 네트워크를 확인해 주세요."; }
+}
+
+$("prev").onclick = () => { view.setMonth(view.getMonth() - 1); renderCal(); };
+$("next").onclick = () => { view.setMonth(view.getMonth() + 1); renderCal(); };
+$("editBtn").onclick = () => {
+  editing = !editing; $("editor").hidden = !editing; $("editBtn").textContent = editing ? "닫기" : "편집";
+  $("token").value = store("gh_token") || ""; render();
+};
+$("addBtn").onclick = () => { list.push({name:"", date:"", slot:"", state:""}); renderEditor(); $("rows").lastChild.querySelector("input").focus(); };
+$("saveBtn").onclick = save;
+load();
+</script>
+</body>
+</html>
