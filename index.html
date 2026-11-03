@@ -54,7 +54,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .group ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
 .group li{display:flex;justify-content:space-between;gap:8px;font-size:.9rem}
-.group li span:last-child{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.group li>span:last-child{color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
 table{width:100%;border-collapse:collapse}
 td{padding:3px 2px}
 td input,td select{width:100%;font:inherit;font-size:.85rem;padding:4px;border:1px solid var(--line);
@@ -62,6 +62,8 @@ td input,td select{width:100%;font:inherit;font-size:.85rem;padding:4px;border:1
 .edit-wrap{overflow-x:auto}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 #msg{font-size:.85rem;color:var(--muted)}
+.group li .memo{display:block;font-size:.8rem;color:var(--muted);white-space:pre-wrap}
+td.memo-cell{min-width:140px}
 </style>
 </head>
 <body>
@@ -161,7 +163,7 @@ function renderCal(){
     cell.className = "d" + (d.getMonth() !== mo ? " out" : "") + (key === today ? " today" : "") + (key === WEDDING ? " wed" : "");
     cell.append(Object.assign(document.createElement("div"), {className:"n", textContent: d.getDate() + (key === WEDDING ? " 💍" : "")}));
     list.filter(m => m.date === key).forEach(m => {
-      cell.append(Object.assign(document.createElement("span"), {className:"chip" + (status(m) === "done" ? " done" : ""), textContent: label(m), title: label(m)}));
+      cell.append(Object.assign(document.createElement("span"), {className:"chip" + (status(m) === "done" ? " done" : ""), textContent: label(m), title: [label(m), m.memo].filter(Boolean).join("\n")}));
     });
     cal.append(cell);
   }
@@ -176,7 +178,9 @@ function renderGroups(){
     box.querySelector("h2 span").textContent = `${name} ${items.length}`;
     for(const m of items){
       const li = document.createElement("li");
-      li.append(Object.assign(document.createElement("span"), {textContent: m.name}),
+      const who = Object.assign(document.createElement("span"), {textContent: m.name});
+      if(m.memo) who.append(Object.assign(document.createElement("span"), {className:"memo", textContent: m.memo}));
+      li.append(who,
                 Object.assign(document.createElement("span"), {textContent: [md(m.date), m.slot].filter(Boolean).join(" ")}));
       box.querySelector("ul").append(li);
     }
@@ -191,6 +195,7 @@ function renderEditor(){
     tr.innerHTML = `<td><input data-k="name" aria-label="이름"></td><td><input data-k="date" type="date" aria-label="날짜"></td>
       <td><input data-k="slot" placeholder="점심/저녁" aria-label="시간대"></td>
       <td><select data-k="state" aria-label="상태"><option value="">-</option><option>조율중</option></select></td>
+      <td class="memo-cell"><input data-k="memo" placeholder="메모 (장소, 선물 등)" aria-label="메모"></td>
       <td><button type="button" aria-label="삭제">✕</button></td>`;
     tr.querySelectorAll("[data-k]").forEach(el => {
       el.value = m[el.dataset.k] || "";
@@ -207,13 +212,12 @@ async function save(){
   store("gh_token", t);
   $("msg").textContent = "저장 중…";
   try{
-    // 다른 기기에서 먼저 저장했을 수 있으니 최신 sha 로 덮어씀 (마지막 저장이 이김)
-    const cur = await fetch(API + "?ref=main", {headers: headers(), cache: "no-store"});
-    if(cur.ok) sha = (await cur.json()).sha;
+    // 불러온 시점의 sha 로 저장 → 그 사이 다른 사람이 저장했으면 GitHub 가 409 를 줘서 덮어쓰지 않음
+    if(!sha){ const cur = await fetch(API + "?ref=main", {headers: headers(), cache: "no-store"}); if(cur.ok) sha = (await cur.json()).sha; }
     const clean = list.filter(m => m.name.trim());
     const r = await fetch(API, {method:"PUT", headers:{...headers(), "Content-Type":"application/json"},
       body: JSON.stringify({message:"청첩장 모임 일정 수정", content: utf8encode(JSON.stringify(clean, null, 2) + "\n"), sha, branch:"main"})});
-    if(!r.ok) throw new Error(r.status === 401 ? "토큰이 맞지 않아요." : r.status === 403 || r.status === 404 ? "토큰에 이 저장소 쓰기 권한이 없어요." : `실패 (${r.status})`);
+    if(!r.ok) throw new Error(r.status === 409 ? "그사이 다른 사람이 먼저 저장했어요. 고친 내용을 적어 두고 새로고침한 뒤 다시 저장해 주세요." : r.status === 401 ? "토큰이 맞지 않아요." : r.status === 403 || r.status === 404 ? "토큰에 이 저장소 쓰기 권한이 없어요." : `실패 (${r.status}) ${(await r.json().catch(() => ({}))).message || ""}`);
     sha = (await r.json()).content.sha; list = clean;
     $("msg").textContent = "저장했어요. 다른 사람은 새로고침하면 보여요.";
     render();
@@ -226,7 +230,7 @@ $("editBtn").onclick = () => {
   editing = !editing; $("editor").hidden = !editing; $("editBtn").textContent = editing ? "닫기" : "편집";
   $("token").value = store("gh_token") || ""; render();
 };
-$("addBtn").onclick = () => { list.push({name:"", date:"", slot:"", state:""}); renderEditor(); $("rows").lastChild.querySelector("input").focus(); };
+$("addBtn").onclick = () => { list.push({name:"", date:"", slot:"", state:"", memo:""}); renderEditor(); $("rows").lastChild.querySelector("input").focus(); };
 $("saveBtn").onclick = save;
 load();
 </script>
