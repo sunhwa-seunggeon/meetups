@@ -12,14 +12,14 @@
 /* 청첩장과 같은 숲색 톤. 위: D-day·진행률 / 가운데: 월 달력 / 아래: 상태별 목록 */
 :root{
   --bg:#f6f4ef; --card:#fcfbfa; --ink:#12291d; --body:#2a4a36; --muted:#6b7f70;
-  --line:#dcd9cf; --forest:#2b4632; --rose:#b5546a; --soft:#e9efe8;
+  --line:#dcd9cf; --forest:#2b4632; --rose:#b5546a; --soft:#e9efe8; --rose-soft:#f6e6ea;
   --done:#7c8b80; --plan:#2b4632; --wait:#b07a1f; --none:#a3a39a;
   --serif:"Noto Serif KR",serif; --sans:"Noto Sans KR",system-ui,sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#0f1a13; --card:#16241b; --ink:#e8eee9; --body:#c6d2c8; --muted:#8fa294;
-  --line:#2a3b2f; --forest:#8fc19c; --rose:#e48aa0; --soft:#1e3125;
+  --line:#2a3b2f; --forest:#8fc19c; --rose:#e48aa0; --soft:#1e3125; --rose-soft:#3a2229;
   --done:#7d8f82; --plan:#8fc19c; --wait:#e0b25a; --none:#6f7a71; color-scheme:dark;
 }}
 *{box-sizing:border-box}
@@ -31,6 +31,10 @@ h1{font-size:1.6rem} h2{font-size:1.1rem}
 .top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px}
 .dday{font-family:var(--serif);color:var(--rose);font-size:1.05rem}
 .sub{color:var(--muted);font-size:.9rem}
+.tabs{display:flex;gap:4px}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.chip.bride,.tag.bride{background:var(--rose-soft)}
+.tag{font-size:.7rem;padding:0 5px;border-radius:4px;background:var(--soft);color:var(--ink);margin-right:4px}
 .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--forest)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
@@ -49,12 +53,12 @@ button{font:inherit;border:1px solid var(--line);background:var(--card);color:va
   border-radius:6px;padding:4px 10px;cursor:pointer}
 button.primary{background:var(--forest);color:var(--card);border-color:var(--forest)}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--rose);outline-offset:1px}
-.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px}
+.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px}
 .group h2{font-family:var(--sans);font-size:.8rem;letter-spacing:.05em;display:flex;gap:6px;align-items:center}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .group ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
-.group li{display:flex;justify-content:space-between;gap:8px;font-size:.9rem}
-.group li>span:last-child{color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.group li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;font-size:.9rem}
+.group li>span:last-child{color:var(--muted);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 table{width:100%;border-collapse:collapse}
 td{padding:3px 2px}
 td input,td select{width:100%;font:inherit;font-size:.85rem;padding:4px;border:1px solid var(--line);
@@ -74,6 +78,9 @@ td.memo-cell{min-width:140px}
       <div class="dday" id="dday"></div>
     </div>
     <div class="row">
+      <div class="tabs" id="tabs" role="group" aria-label="누구 일정">
+        <button type="button" data-who="">전체</button><button type="button" data-who="신부">신부</button><button type="button" data-who="신랑">신랑</button>
+      </div>
       <span class="sub" id="progress"></span>
       <button id="editBtn" type="button">편집</button>
     </div>
@@ -120,6 +127,10 @@ const md = s => s ? `${+s.slice(5,7)}/${+s.slice(8)}` : "";
 let list = [], sha = null, view = new Date(), editing = false;
 view.setDate(1);
 
+// 예전 항목엔 who 가 없음 → 신부 일정으로 봄
+const whoOf = m => m.who || "신부";
+let who = "";
+const shown = () => list.filter(m => !who || whoOf(m) === who);
 const status = m => m.date ? (m.date < today ? "done" : "plan") : (m.state === "조율중" ? "wait" : "none");
 const label = m => m.name + (m.slot ? ` · ${m.slot}` : "");
 
@@ -143,9 +154,10 @@ async function load(){
 function render(){
   const days = Math.round((new Date(WEDDING) - new Date(today)) / 864e5);
   $("dday").textContent = days > 0 ? `12월 27일(일) 결혼식 · D-${days}` : days === 0 ? "오늘 결혼식!" : "결혼 축하해요";
-  const done = list.filter(m => status(m) === "done").length;
-  $("progress").textContent = `${done} / ${list.length} 완료`;
-  $("barFill").style.width = list.length ? `${done / list.length * 100}%` : "0";
+  const s = shown(), done = s.filter(m => status(m) === "done").length;
+  $("progress").textContent = `${done} / ${s.length} 완료`;
+  $("barFill").style.width = s.length ? `${done / s.length * 100}%` : "0";
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.who === who));
   renderCal(); renderGroups();
   if(editing) renderEditor();
 }
@@ -162,8 +174,8 @@ function renderCal(){
     const key = ymd(d), cell = document.createElement("div");
     cell.className = "d" + (d.getMonth() !== mo ? " out" : "") + (key === today ? " today" : "") + (key === WEDDING ? " wed" : "");
     cell.append(Object.assign(document.createElement("div"), {className:"n", textContent: d.getDate() + (key === WEDDING ? " 💍" : "")}));
-    list.filter(m => m.date === key).forEach(m => {
-      cell.append(Object.assign(document.createElement("span"), {className:"chip" + (status(m) === "done" ? " done" : ""), textContent: label(m), title: [label(m), m.memo].filter(Boolean).join("\n")}));
+    shown().filter(m => m.date === key).forEach(m => {
+      cell.append(Object.assign(document.createElement("span"), {className:"chip" + (status(m) === "done" ? " done" : "") + (whoOf(m) === "신부" ? " bride" : ""), textContent: label(m), title: [label(m), m.memo].filter(Boolean).join("\n")}));
     });
     cal.append(cell);
   }
@@ -172,15 +184,17 @@ function renderCal(){
 function renderGroups(){
   const g = $("groups"); g.textContent = "";
   for(const [k, [name, color]] of Object.entries(STATES)){
-    const items = list.filter(m => status(m) === k).sort((a,b) => (a.date||"").localeCompare(b.date||""));
+    const items = shown().filter(m => status(m) === k).sort((a,b) => (a.date||"").localeCompare(b.date||""));
     const box = document.createElement("div"); box.className = "card group";
     box.innerHTML = `<h2><i class="dot" style="background:var(${color})"></i><span></span></h2><ul></ul>`;
     box.querySelector("h2 span").textContent = `${name} ${items.length}`;
     for(const m of items){
       const li = document.createElement("li");
-      const who = Object.assign(document.createElement("span"), {textContent: m.name});
-      if(m.memo) who.append(Object.assign(document.createElement("span"), {className:"memo", textContent: m.memo}));
-      li.append(who,
+      const nm = document.createElement("span");
+      if(!who) nm.append(Object.assign(document.createElement("span"), {className:"tag" + (whoOf(m) === "신부" ? " bride" : ""), textContent: whoOf(m)}));
+      nm.append(m.name);
+      if(m.memo) nm.append(Object.assign(document.createElement("span"), {className:"memo", textContent: m.memo}));
+      li.append(nm,
                 Object.assign(document.createElement("span"), {textContent: [md(m.date), m.slot].filter(Boolean).join(" ")}));
       box.querySelector("ul").append(li);
     }
@@ -191,14 +205,15 @@ function renderGroups(){
 function renderEditor(){
   const tb = $("rows"); tb.textContent = "";
   list.forEach((m, i) => {
+    if(who && whoOf(m) !== who) return;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><input data-k="name" aria-label="이름"></td><td><input data-k="date" type="date" aria-label="날짜"></td>
+    tr.innerHTML = `<td><select data-k="who" aria-label="누구"><option>신부</option><option>신랑</option></select></td><td><input data-k="name" aria-label="이름"></td><td><input data-k="date" type="date" aria-label="날짜"></td>
       <td><input data-k="slot" placeholder="점심/저녁" aria-label="시간대"></td>
       <td><select data-k="state" aria-label="상태"><option value="">-</option><option>조율중</option></select></td>
       <td class="memo-cell"><input data-k="memo" placeholder="메모 (장소, 선물 등)" aria-label="메모"></td>
       <td><button type="button" aria-label="삭제">✕</button></td>`;
     tr.querySelectorAll("[data-k]").forEach(el => {
-      el.value = m[el.dataset.k] || "";
+      el.value = el.dataset.k === "who" ? whoOf(m) : m[el.dataset.k] || "";
       el.onchange = () => { m[el.dataset.k] = el.value; renderCal(); renderGroups(); };
     });
     tr.querySelector("button").onclick = () => { list.splice(i, 1); render(); };
@@ -230,8 +245,10 @@ $("editBtn").onclick = () => {
   editing = !editing; $("editor").hidden = !editing; $("editBtn").textContent = editing ? "닫기" : "편집";
   $("token").value = store("gh_token") || ""; render();
 };
-$("addBtn").onclick = () => { list.push({name:"", date:"", slot:"", state:"", memo:""}); renderEditor(); $("rows").lastChild.querySelector("input").focus(); };
+$("addBtn").onclick = () => { list.push({who: who || "신부", name:"", date:"", slot:"", state:"", memo:""}); renderEditor(); $("rows").lastChild.querySelector("input").focus(); };
 $("saveBtn").onclick = save;
+$("tabs").onclick = e => { if(e.target.dataset.who === undefined) return; who = e.target.dataset.who; store("who", who); render(); };
+who = store("who") || "";
 load();
 </script>
 </body>
